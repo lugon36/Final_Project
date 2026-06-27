@@ -1,0 +1,16 @@
+Clinical Decision Support Questionnaire Structure
+
+1. Biological Sex --> Sex
+2. Age at diagnosis --> Diangosis Age
+3. Primary tumor site --> CANCER_TYPE
+4. Anatomic subsite --> Tumor Disease Anatomic Site
+5. Specimen collection type --> Sample Type
+6. Pathologic Staging (AJCC) --> Neoplasm Disease Stage American Joint Committee on Cancer Code
+7. T (Primary Tumor Extension) --> American Joint Committee on Cancer Tumor Stage Code
+8. N (Regional Lymph Nodes) -->  American Joint Committee on Cancer Code
+9. M (Distant Metastasis) --> American Joint Committee on Cancer Metastasis Stage Code
+10. Molecular Histologic Subtype --> Subtype
+11. Genomic Instability Metrics:
+    - MSI Score --> MSIsensor Score
+    - Tumor Mutational Burden --> TMB (nonsynonymus)
+
