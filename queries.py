@@ -15,7 +15,7 @@ def init_connection():
     return create_engine(DATABASE_URL)
 
 def fetch_relational_patient_data():
-    """Fetches and joins demographics and clinical diagnostics from Neon."""
+    """Retrieves the core demographic and primary tumor clinical mappings."""
     engine = init_connection()
     query = """
         SELECT 
@@ -24,18 +24,13 @@ def fetch_relational_patient_data():
             p.smoking_status,
             p.activity_level,
             d.cancer_type,
-            d.pathologic_stage AS neoplasm_disease_stage_american_joint_committee_on_cancer_code,
+            d.neoplasm_disease_stage_american_joint_committee_on_cancer_code,
             d.overall_survival_months
         FROM patients p
         INNER JOIN diagnostics d ON p.patient_id = d.patient_id;
     """
-    try:
-        with engine.connect() as connection:
-            df_result = pd.read_sql(text(query), connection)
-            return df_result
-    except Exception as e:
-        st.error(f"Patient Query Failed: {e}")
-        return pd.DataFrame()
+    with engine.connect() as connection:
+        return pd.read_sql(text(query), connection)
 
 def fetch_lifestyle_master():
     """Retrieves the oncology lifestyle parameters from Neon."""
@@ -48,7 +43,19 @@ def fetch_lifestyle_master():
     except Exception as e:
         st.error(f"Lifestyle Query Failed: {e}")
         return pd.DataFrame()
-    
+
+def fetch_pharmacology_protocols():
+    """Extracts the oncological treatment guidelines from Neon."""
+    engine = init_connection()
+    query = "SELECT * FROM treatment_protocols;"
+    try:
+        with engine.connect() as connection:
+            return pd.read_sql(text(query), connection)
+    except Exception as e:
+        st.error(f"❌ Pharmacology Query Failed: {e}")
+        return pd.DataFrame()
+
+
     # ==============================================================================
 # ADVANCED DATABASE CORE & AUTHENTICATION MODULE (queries.py)
 # ==============================================================================
@@ -129,10 +136,10 @@ def fetch_relational_patient_data():
         SELECT 
             p.age,
             p.sex,
-            p.smoking_status,
+            p.smoking_status,  
             p.activity_level,
             d.cancer_type,
-            d.pathologic_stage AS neoplasm_disease_stage_american_joint_committee_on_cancer_code,
+            d.neoplasm_disease_stage_american_joint_committee_on_cancer_code,
             d.overall_survival_months
         FROM patients p
         INNER JOIN diagnostics d ON p.patient_id = d.patient_id;
@@ -155,7 +162,7 @@ def fetch_advanced_cancer_stats(selected_cancer):
     age_query = """
         SELECT 
             p.sex,
-            ROUND(AVG(p.age), 1) AS avg_age,
+            ROUND(AVG(p.age)::numeric, 1) AS avg_age,
             COUNT(*) as patient_count
         FROM patients p
         INNER JOIN diagnostics d ON p.patient_id = d.patient_id
@@ -163,11 +170,11 @@ def fetch_advanced_cancer_stats(selected_cancer):
         GROUP BY p.sex;
     """
     
-    # Query B: Risk factor cross-tabulation (Smoking correlation with survival survival timeline)
+    # Query B: Risk factor cross-tabulation (Smoking correlation with survival)
     risk_query = """
         SELECT 
             p.smoking_status,
-            ROUND(AVG(d.overall_survival_months), 1) AS avg_survival
+            ROUND(AVG(d.overall_survival_months)::numeric, 1) AS avg_survival
         FROM patients p
         INNER JOIN diagnostics d ON p.patient_id = d.patient_id
         WHERE d.cancer_type = :cancer_type AND p.smoking_status NOT IN ('Unknown', 'N/A')
@@ -180,3 +187,21 @@ def fetch_advanced_cancer_stats(selected_cancer):
         df_risk = pd.read_sql(text(risk_query), connection, params={"cancer_type": selected_cancer})
         
     return df_age, df_risk
+
+def fetch_top_genotypes(selected_cancer):
+    """Fetches the top 5 most frequent molecular subtypes/genotypes for the selected cancer."""
+    engine = init_connection()
+    query = """
+        SELECT 
+            subtype AS "Molecular Subtype / Genotype",
+            COUNT(*) as "Patient Count"
+        FROM diagnostics
+        WHERE cancer_type = :cancer_type 
+          AND subtype IS NOT NULL 
+          AND subtype NOT IN ('Unknown', 'N/A', '')
+        GROUP BY subtype
+        ORDER BY "Patient Count" DESC
+        LIMIT 5;
+    """
+    with engine.connect() as connection:
+        return pd.read_sql(text(query), connection, params={"cancer_type": selected_cancer})
