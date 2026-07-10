@@ -1,11 +1,10 @@
-# app/ONCASIS.app.py
 import streamlit as st
 from auth_ui import render_auth_gateway
 from main_ui import render_main_application
 
 # 1. Page configuration (This must be the first Streamlit command)
 st.set_page_config(
-    page_title="ONCASIS", 
+    page_title="ONCOASIS", 
     page_icon="🩺", 
     layout="wide", 
     initial_sidebar_state="expanded"

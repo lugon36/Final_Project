@@ -20,7 +20,7 @@ def render_main_application():
         st.rerun()
         
     st.sidebar.markdown("---")
-    st.title("🩺 ONCASIS: Integrative Oncology Care Assistant")
+    st.title("🩺 ONCOASIS: Integrative Oncology Care Assistant")
     st.warning(
     "⚠️ **LEGAL NOTICE / CLINICAL DISCLAIMER:** This application is a digital support tool "
     "intended solely for informational purposes and to assist healthcare professionals. "
