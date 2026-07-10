@@ -38,7 +38,7 @@ The project uses a structured "Story" format in Tableau to guide stakeholders th
 - **Biomarker Correlation**: Initial analysis shows that higher mutation burdens correlate with shorter disease-free periods, validating the importance of integrating molecular markers into prognostic models.
 
 ## Navigation Guide
-- **Tableau Story**: [Insert Link to your Tableau Public Story]
+- **Tableau Story**: https://public.tableau.com/views/ONCOASIS_Final_Project/Story1?:language=es-ES&publish=yes&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link
 
 - **Recommendation App**: onco-asis.streamlit.app
 
