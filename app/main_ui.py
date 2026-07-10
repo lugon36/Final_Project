@@ -1,9 +1,15 @@
-# app/main_ui.py
+import pandas as pd
 import streamlit as st
 import plotly.express as px
-from app.queries import (
-    fetch_relational_patient_data, fetch_lifestyle_master,
-    fetch_pharmacology_protocols, fetch_advanced_cancer_stats, fetch_top_genotypes
+from queries import (
+    fetch_relational_patient_data, 
+    fetch_lifestyle_master, 
+    fetch_nhanes_lifestyle_stats,
+    fetch_pharmacology_protocols, 
+    fetch_advanced_cancer_stats, 
+    fetch_top_genotypes, 
+    fetch_nhanes_sedentary_stats, 
+    fetch_survival_by_stage,
 )
 
 def render_main_application():
@@ -15,7 +21,13 @@ def render_main_application():
         
     st.sidebar.markdown("---")
     st.title("🩺 ONCASIS: Integrative Oncology Care Assistant")
-    st.warning("⚠️ **MEDICAL DISCLAIMER:** ONCASIS is an AI-powered clinical decision support tool. Recommendations must not substitute professional medical judgment.")
+    st.warning(
+    "⚠️ **LEGAL NOTICE / CLINICAL DISCLAIMER:** This application is a digital support tool "
+    "intended solely for informational purposes and to assist healthcare professionals. "
+    "The data, lifestyle suggestions, and pharmacological schemas displayed do not replace "
+    "professional clinical judgment. **The attending medical specialist always retains absolute responsibility "
+    "and the final decision-making authority** regarding patient diagnosis and treatment protocols."
+)
     st.markdown("---")
 
     # 1. Fetch ALL foundational data
@@ -28,7 +40,7 @@ def render_main_application():
         st.stop()
 
     # 2. Dynamic UI Options
-    # Usando dropna() nos aseguramos de que solo cargue los 15 cánceres oficiales de la BD
+
     unique_cancers = sorted(df_patients["cancer_type"].dropna().unique().tolist())
     unique_sex = sorted(df_patients["sex"].dropna().unique().tolist())
     
@@ -57,6 +69,7 @@ def render_main_application():
         selected_prior = st.selectbox("7. Longitudinal Therapeutic History:", options=prior_options)
         
         submit_button = st.form_submit_button(label="Generate Personalized Care Plan")
+
 
     if submit_button:
         safe_cancer_name = str(selected_cancer).strip().lower()
@@ -115,37 +128,84 @@ def render_main_application():
         # ==========================================
         with tab_stats:
             st.markdown(f"### 📈 Real-World Data Analytics for {selected_cancer}")
+            
+        
             df_age, df_risk = fetch_advanced_cancer_stats(selected_cancer)
             df_genotypes = fetch_top_genotypes(selected_cancer)
             
             col_sq1, col_sq2 = st.columns(2)
-            
             with col_sq1:
                 st.markdown("#### 👥 Gender Distribution")
                 if not df_age.empty:
-                    # Pie chart for sex distribution
                     fig_pie = px.pie(df_age, values='patient_count', names='sex', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
                     st.plotly_chart(fig_pie, use_container_width=True)
-                else:
-                    st.warning("No demographic data available.")
-                    
             with col_sq2:
-                st.markdown("#### 🚬 Smoking vs. Survival (Months)")
-                if not df_risk.empty:
-                    # Bar chart for survival vs smoking
-                    fig_bar = px.bar(df_risk, x='smoking_status', y='avg_survival', color='smoking_status', text_auto=True)
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                st.markdown("#### ⏳ Clinical Survival")
+                df_kpi = fetch_survival_by_stage(selected_cancer, selected_stage)
+                
+                if not df_kpi.empty and df_kpi['avg_survival'][0] is not None:
+                    avg_val = df_kpi['avg_survival'][0]
+                    st.metric(label=f"Avg. Survival for {selected_stage}", value=f"{avg_val:.1f} months")
+                    st.caption(f"Based on historical data for {selected_cancer}")
                 else:
-                    st.warning("No risk factor data available.")
+                    st.info("No sufficient data for this specific clinical combination.")
             
+        
             st.markdown("---")
-            st.markdown("#### 🧬 Top 5 Molecular Genotypes in Cohort")
-            if not df_genotypes.empty:
-                # Horizontal bar chart for mutations
-                fig_geno = px.bar(df_genotypes, x='Patient Count', y='Molecular Subtype / Genotype', orientation='h', color='Patient Count', color_continuous_scale='Blues')
-                fig_geno.update_layout(yaxis={'categoryorder':'total ascending'})
-                st.plotly_chart(fig_geno, use_container_width=True)
+            st.markdown("### 🌍 Population-Level Lifestyle & Survival Insights (NHANES)")
+            
+      
+            df_nhanes = fetch_nhanes_lifestyle_stats()
+            if not df_nhanes.empty:
+                fig_nhanes = px.bar(
+                    df_nhanes, x='smoking_history', y='avg_survival', color='smoking_history',
+                    title="Impact of Smoking History (100+ cigarettes) on Survival",
+                    labels={'smoking_history': 'Smoking History', 'avg_survival': 'Avg. Survival (Months)'},
+                    color_discrete_map={'Ever Smoked': '#EF553B', 'Never Smoked': '#00CC96'}
+                )
+                fig_nhanes.update_layout(showlegend=False)
+                st.plotly_chart(fig_nhanes, use_container_width=True)
+            
+   
+            st.markdown("### 🏃‍♂️ Impact of Sedentary Behavior")
+            df_sed = fetch_nhanes_sedentary_stats()
+            if not df_sed.empty:
+                df_sed['survival_months'] = pd.to_numeric(df_sed['survival_months'], errors='coerce')
+                df_sed['sedentary_minutes_day'] = pd.to_numeric(df_sed['sedentary_minutes_day'], errors='coerce')
+                bins = [0, 300, 600, 1440]
+                labels = ['Low (<300m)', 'Medium (300-600m)', 'High (>600m)']
+                df_sed['sedentary_bins'] = pd.cut(df_sed['sedentary_minutes_day'], bins=bins, labels=labels)
+                df_sed_grouped = df_sed.groupby('sedentary_bins', observed=True)['survival_months'].mean().reset_index()
+                
+                fig_sed = px.bar(
+                    df_sed_grouped, x='sedentary_bins', y='survival_months',
+                    title="Average Survival by Daily Sedentary Time",
+                    color='sedentary_bins',
+                    color_discrete_sequence=px.colors.sequential.Viridis
+                )
+                st.plotly_chart(fig_sed, use_container_width=True)
             else:
-                st.info("No specific molecular subtype data available.")
+                st.info("Sedentary data not currently available.")
+    
+            st.markdown("---")
+            st.markdown("### 🌐 Evidence-Based International Oncology Guidelines")
+            st.markdown("Direct clinical access paths to standard reference manuals:")
+
+            col_guideline1, col_guideline2 = st.columns(2)
+            with col_guideline1:
+                st.markdown("#### 🇺🇸 US Frameworks")
+                st.markdown("- [NCCN Guidelines](https://www.nccn.org/guidelines)")
+                st.markdown("- [ASCO Portal](https://www.asco.org/practice-patients/guidelines)")
+            with col_guideline2:
+                st.markdown("#### 🇪🇺 EU & National Frameworks")
+                st.markdown("- [ESMO Library](https://www.esmo.org/guidelines)")
+                st.markdown("- [SEOM Portals](https://seom.org/guias-clinicas-seom)")
+
+            st.markdown("### 🌐 General Comprehensive Oncology Registries")
+            st.markdown("- [NCCN Global Index](https://www.nccn.org/guidelines) | [ESMO Clinical Index](https://www.esmo.org/guidelines) | [SEOM Clinical Index](https://seom.org/guias-clinicas-seom)")
+
     else:
         st.info("💡 Configure the patient baseline in the sidebar and click 'Generate Personalized Care Plan'.")
+
+
+        

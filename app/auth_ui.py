@@ -1,6 +1,6 @@
 # app/auth_ui.py
 import streamlit as st
-from app.queries import verify_user_login, register_new_user
+from queries import verify_user_login, register_new_user
 
 def render_auth_gateway():
     st.title("🩺 ONCASIS: Clinical Access Portal")

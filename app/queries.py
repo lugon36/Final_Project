@@ -9,7 +9,6 @@ DATABASE_URL = st.secrets["DATABASE_URL"]
 
 @st.cache_resource
 def init_connection():
-    """Initializes and caches the SQLAlchemy database engine connection."""
     return create_engine(DATABASE_URL)
 
 def hash_password(password):
@@ -67,16 +66,53 @@ def verify_user_login(username, password):
 # ==========================================
 @st.cache_data
 def fetch_relational_patient_data():
+    """Retrieves all clinical data from the master 'patients' table."""
     engine = init_connection()
     query = """
-        SELECT p.age, p.sex, p.smoking_status, p.activity_level,
-               d.cancer_type, d.neoplasm_disease_stage_american_joint_committee_on_cancer_code,
-               d.overall_survival_months
-        FROM patients p
-        INNER JOIN diagnostics d ON p.patient_id = d.patient_id;
+        SELECT 
+            diagnosis_age AS age,
+            sex,
+            cancer_type,
+            neoplasm_disease_stage_american_joint_committee_on_cancer_code,
+            overall_survival_months,
+            subtype
+        FROM patients;
     """
     with engine.connect() as connection:
         return pd.read_sql(text(query), connection)
+
+@st.cache_data
+def fetch_advanced_cancer_stats(selected_cancer):
+    """Computes clinical aggregation metrics."""
+    engine = init_connection()
+    # Ajustado a tus nombres de columnas reales
+    age_query = """
+        SELECT sex, ROUND(AVG(diagnosis_age)::numeric, 1) AS avg_age, COUNT(*) as patient_count
+        FROM patients
+        WHERE cancer_type = :cancer_type
+        GROUP BY sex;
+    """
+
+    with engine.connect() as connection:
+        df_age = pd.read_sql(text(age_query), connection, params={"cancer_type": selected_cancer})
+        
+    return df_age, pd.DataFrame() # Devolvemos un DF vacío para riesgo ya que no tienes esos datos
+
+@st.cache_data
+def fetch_top_genotypes(selected_cancer):
+    """Fetches top 5 subtypes."""
+    engine = init_connection()
+    query = """
+        SELECT subtype AS "Molecular Subtype / Genotype", COUNT(*) as "Patient Count"
+        FROM patients
+        WHERE cancer_type = :cancer_type 
+          AND subtype != 'Not applicable / Unknown'
+        GROUP BY subtype
+        ORDER BY "Patient Count" DESC
+        LIMIT 5;
+    """
+    with engine.connect() as connection:
+        return pd.read_sql(text(query), connection, params={"cancer_type": selected_cancer})
 
 @st.cache_data
 def fetch_lifestyle_master():
@@ -94,26 +130,24 @@ def fetch_pharmacology_protocols():
 
 @st.cache_data
 def fetch_advanced_cancer_stats(selected_cancer):
+    """Computes clinical aggregation metrics from the master 'patients' table."""
     engine = init_connection()
-    age_query = """
-        SELECT p.sex, ROUND(AVG(p.age)::numeric, 1) AS avg_age, COUNT(*) as patient_count
-        FROM patients p
-        INNER JOIN diagnostics d ON p.patient_id = d.patient_id
-        WHERE d.cancer_type = :cancer_type
-        GROUP BY p.sex;
+    
+ 
+    query = """
+        SELECT 
+            sex, 
+            ROUND(AVG(diagnosis_age)::numeric, 1) AS avg_age, 
+            COUNT(*) as patient_count
+        FROM patients
+        WHERE cancer_type = :cancer_type
+        GROUP BY sex;
     """
-    risk_query = """
-        SELECT p.smoking_status, ROUND(AVG(d.overall_survival_months)::numeric, 1) AS avg_survival
-        FROM patients p
-        INNER JOIN diagnostics d ON p.patient_id = d.patient_id
-        WHERE d.cancer_type = :cancer_type AND p.smoking_status NOT IN ('Unknown', 'N/A')
-        GROUP BY p.smoking_status
-        ORDER BY avg_survival DESC;
-    """
+    
     with engine.connect() as connection:
-        df_age = pd.read_sql(text(age_query), connection, params={"cancer_type": selected_cancer})
-        df_risk = pd.read_sql(text(risk_query), connection, params={"cancer_type": selected_cancer})
-    return df_age, df_risk
+        df_age = pd.read_sql(text(query), connection, params={"cancer_type": selected_cancer})
+        
+    return df_age, pd.DataFrame()
 
 @st.cache_data
 def fetch_top_genotypes(selected_cancer):
@@ -128,3 +162,51 @@ def fetch_top_genotypes(selected_cancer):
     """
     with engine.connect() as connection:
         return pd.read_sql(text(query), connection, params={"cancer_type": selected_cancer})
+    
+@st.cache_data
+def fetch_nhanes_lifestyle_stats():
+    """Retrieves life-long smoking history and mortality data."""
+    engine = init_connection()
+    
+    # Hemos añadido ::FLOAT para convertir survival_months a número
+    query = """
+        SELECT 
+            CASE 
+                WHEN smoked_100_cigs = 1 THEN 'Ever Smoked'
+                WHEN smoked_100_cigs = 2 THEN 'Never Smoked'
+                ELSE 'Unknown'
+            END AS smoking_history,
+            AVG(survival_months::FLOAT) AS avg_survival
+        FROM nhanes_analytics_data
+        WHERE smoked_100_cigs IN (1, 2)
+        GROUP BY smoking_history
+        ORDER BY avg_survival DESC;
+    """
+    
+    with engine.connect() as connection:
+        return pd.read_sql(text(query), connection)
+    
+@st.cache_data
+def fetch_nhanes_sedentary_stats():
+    engine = init_connection()
+    query = """
+        SELECT sedentary_minutes_day, survival_months
+        FROM nhanes_analytics_data
+        WHERE sedentary_minutes_day IS NOT NULL 
+          AND survival_months IS NOT NULL;
+    """
+    with engine.connect() as connection:
+        return pd.read_sql(text(query), connection)
+    
+@st.cache_data
+def fetch_survival_by_stage(cancer_type, stage):
+    engine = init_connection()
+    
+    query = """
+        SELECT ROUND(AVG(CAST(overall_survival_months AS NUMERIC)), 2) as avg_survival
+        FROM patients
+        WHERE cancer_type = :cancer 
+          AND neoplasm_disease_stage_american_joint_committee_on_cancer_code = :stage;
+    """
+    with engine.connect() as connection:
+        return pd.read_sql(text(query), connection, params={"cancer": cancer_type, "stage": stage})

@@ -1,5 +1,7 @@
 # app/ONCASIS.app.py
 import streamlit as st
+from auth_ui import render_auth_gateway
+from main_ui import render_main_application
 
 # 1. Page configuration (This must be the first Streamlit command)
 st.set_page_config(
@@ -16,8 +18,8 @@ if "current_user" not in st.session_state:
     st.session_state["current_user"] = ""
 
 # 3. Modular interface imports
-from app.auth_ui import render_auth_gateway
-from app.main_ui import render_main_application
+from auth_ui import render_auth_gateway
+from main_ui import render_main_application
 
 # 4. Application Routing Logic 
 if not st.session_state["logged_in"]:
