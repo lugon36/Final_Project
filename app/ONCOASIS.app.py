@@ -1,4 +1,8 @@
+import sys
+import os
 import streamlit as st
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from auth_ui import render_auth_gateway
 from main_ui import render_main_application
 
